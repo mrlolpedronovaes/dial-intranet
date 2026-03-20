@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "Notice": {
+      "title": "Notice",
+      "description": "A notice or announcement on the intranet board.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the notice" },
+        "date": { "type": "string", "description": "Formatted date string" },
+        "excerpt": { "type": "string", "description": "Short description or content" },
+        "category": { "type": "string", "description": "Category like RH, TI, Comercial" },
+        "important": { "type": "boolean", "description": "Flag for important notices" },
+        "createdAt": { "type": "timestamp", "description": "Creation timestamp" },
+        "authorId": { "type": "string", "description": "UID of the creator" }
+      },
+      "required": ["title", "date", "excerpt", "category", "important", "createdAt", "authorId"]
+    },
+    "QuickLinkSection": {
+      "title": "QuickLinkSection",
+      "description": "A section of quick links.",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "description": "Name of the section" },
+        "icon": { "type": "string", "description": "Icon name from Lucide" },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" }
+            },
+            "required": ["name", "url"]
+          }
+        },
+        "order": { "type": "number", "description": "Display order" }
+      },
+      "required": ["category", "icon", "links", "order"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and role.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "gender": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "phone": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "denied"] },
+        "lastLogin": { "type": "timestamp" }
+      },
+      "required": ["email", "role", "status"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Activity log entry.",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "timestamp": { "type": "timestamp" },
+        "userId": { "type": "string" },
+        "performedBy": { "type": "string" }
+      },
+      "required": ["action", "timestamp", "userId", "performedBy"]
+    },
+    "Guide": {
+      "title": "Guide",
+      "description": "A guide or tutorial for a specific team.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "authorId": { "type": "string" }
+      },
+      "required": ["title", "content", "category", "createdAt", "authorId"]
+    },
+    "Invitation": {
+      "title": "Invitation",
+      "description": "An invitation for a user to join.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "A helpdesk support ticket.",
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in-progress", "closed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "timestamp" },
+        "authorId": { "type": "string" },
+        "authorEmail": { "type": "string" }
+      },
+      "required": ["subject", "description", "category", "status", "priority", "createdAt", "authorId", "authorEmail"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for a user.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "timestamp" },
+        "userId": { "type": "string" }
+      },
+      "required": ["title", "message", "type", "read", "createdAt", "userId"]
+    }
+  },
+  "firestore": {
+    "/notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/Notice" },
+      "description": "Collection of notices."
+    },
+    "/quickLinks/{sectionId}": {
+      "schema": { "$ref": "#/entities/QuickLinkSection" },
+      "description": "Collection of quick link sections."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of users and their roles."
+    },
+    "/guides/{guideId}": {
+      "schema": { "$ref": "#/entities/Guide" },
+      "description": "Collection of guides and tutorials."
+    },
+    "/invitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/Invitation" },
+      "description": "Collection of user invitations."
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "#/entities/Log" },
+      "description": "Collection of activity logs."
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Collection of helpdesk tickets."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Collection of user notifications."
+    }
+  }
+}

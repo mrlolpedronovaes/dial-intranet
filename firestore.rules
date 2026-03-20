@@ -1,0 +1,219 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: notices
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required, max 100)
+    //   - date: string (required, max 50)
+    //   - excerpt: string (required, max 1000)
+    //   - category: string (required, max 50)
+    //   - important: boolean (required)
+    //   - createdAt: timestamp (required)
+    //   - authorId: string (required)
+    //
+    // Collection: quickLinks
+    // Document ID: auto-generated
+    // Fields:
+    //   - category: string (required, max 50)
+    //   - icon: string (required, max 50)
+    //   - links: list of objects (required, max 20 items)
+    //   - order: number (required)
+    //
+    // Collection: users
+    // Document ID: user uid
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, 'admin' or 'user')
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (request.auth.token.email == "mrlolpedro@gmail.com" && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidFile(file) {
+      return file is map && file.keys().hasAll(['name', 'url']) &&
+             file.name is string && file.name.size() > 0 && file.name.size() <= 100 &&
+             file.url is string && file.url.size() > 0 && file.url.size() <= 1000;
+    }
+
+    function isValidNotice() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['title', 'date', 'excerpt', 'category', 'important', 'createdAt', 'authorId', 'authorName']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.date is string && data.date.size() > 0 && data.date.size() <= 50 &&
+             data.excerpt is string && data.excerpt.size() > 0 && data.excerpt.size() <= 1000 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.important is bool &&
+             data.createdAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 100));
+    }
+
+    function isValidQuickLink() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['category', 'icon', 'links', 'order']) &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.icon is string && data.icon.size() > 0 && data.icon.size() <= 50 &&
+             data.links is list && data.links.size() <= 20 &&
+             data.order is number;
+    }
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'status', 'lastLogin', 'lastAction', 'lastActionAt', 'online', 'totalActivitySeconds', 'displayName', 'gender', 'birthDate', 'phone', 'photoURL']) &&
+             hasRequiredFields(['email', 'role']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+             data.role in ['admin', 'user', 'client'] &&
+             (!('uid' in data) || data.uid is string) &&
+             (!('status' in data) || data.status in ['pending', 'approved', 'denied']) &&
+             (!('lastLogin' in data) || data.lastLogin is timestamp) &&
+             (!('lastAction' in data) || data.lastAction is string) &&
+             (!('lastActionAt' in data) || data.lastActionAt is timestamp) &&
+             (!('online' in data) || data.online is bool) &&
+             (!('totalActivitySeconds' in data) || data.totalActivitySeconds is number) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('gender' in data) || (data.gender is string && data.gender.size() <= 20)) &&
+             (!('birthDate' in data) || (data.birthDate is string && data.birthDate.size() <= 20)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000));
+    }
+
+    function isValidLog() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['userId', 'action', 'timestamp', 'performedBy', 'details']) &&
+             data.userId is string &&
+             data.action is string &&
+             data.timestamp is timestamp &&
+             data.performedBy == request.auth.uid &&
+             (!('details' in data) || data.details == null || data.details is map);
+    }
+
+    match /userLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidLog();
+      allow delete: if isAdmin();
+    }
+
+    function isValidGuide() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['title', 'content', 'category', 'createdAt', 'authorId', 'authorName']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 50000 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.createdAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 100));
+    }
+
+    function isApproved() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' || isAdmin());
+    }
+
+    match /notices/{noticeId} {
+      allow read: if isApproved();
+      allow create: if isAdmin() && isValidNotice();
+      allow update: if isAdmin() && isValidNotice() && request.resource.data.authorId == resource.data.authorId && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /quickLinks/{sectionId} {
+      allow read: if isApproved();
+      allow create: if isAdmin() && isValidQuickLink();
+      allow update: if isAdmin() && isValidQuickLink();
+      allow delete: if isAdmin();
+    }
+
+    function isValidInvitation() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['email', 'createdAt']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+             data.createdAt is timestamp;
+    }
+
+    match /invitations/{invitationId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidInvitation();
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser() &&
+                    ((request.resource.data.role == 'user' && request.resource.data.status == 'pending') || isAdmin());
+      allow update: if (isAdmin() || isOwner(userId)) && isValidUser();
+      allow delete: if isAdmin();
+    }
+
+    match /guides/{guideId} {
+      allow read: if isApproved();
+      allow create: if isAdmin() && isValidGuide();
+      allow update: if isAdmin() && isValidGuide() && request.resource.data.authorId == resource.data.authorId && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    function isValidTicket() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['subject', 'description', 'category', 'status', 'priority', 'createdAt', 'authorId', 'authorEmail']) &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 200 &&
+             data.description is string && data.description.size() > 0 && data.description.size() <= 5000 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.status in ['open', 'in-progress', 'closed'] &&
+             data.priority in ['low', 'medium', 'high'] &&
+             data.createdAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (data.authorEmail == null || data.authorEmail is string);
+    }
+
+    function isValidNotification() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['title', 'message', 'type', 'read', 'createdAt', 'userId']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 500 &&
+             data.type in ['info', 'success', 'warning', 'error'] &&
+             data.read is bool &&
+             data.createdAt is timestamp &&
+             data.userId is string;
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}
