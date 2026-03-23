@@ -8,3 +8,41 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+@layer utilities {
+  .no-print {
+    @apply print:hidden;
+  }
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+  
+  body {
+    background: white !important;
+  }
+
+  /* Hide everything by default */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ensure the viewer is visible and takes full page */
+  .fixed.inset-0.z-\[100\] {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+    background: white !important;
+    z-index: auto !important;
+  }
+
+  .page-break-after-always {
+    page-break-after: always !important;
+    break-after: always !important;
+  }
+}

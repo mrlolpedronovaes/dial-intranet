@@ -47,6 +47,8 @@
         "gender": { "type": "string" },
         "birthDate": { "type": "string" },
         "phone": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "department": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "user"] },
         "status": { "type": "string", "enum": ["pending", "approved", "denied"] },
@@ -118,6 +120,35 @@
         "userId": { "type": "string" }
       },
       "required": ["title", "message", "type", "read", "createdAt", "userId"]
+    },
+    "CleaningRotation": {
+      "title": "CleaningRotation",
+      "description": "Configuration for the weekly cleaning rotation.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "tasks": { "type": "array", "items": { "type": "string" } },
+        "currentIndex": { "type": "number" },
+        "lastRotationDate": { "type": "timestamp" },
+        "manualOverride": { "type": "object" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["participants", "tasks", "currentIndex", "updatedAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "A dynamic report with slides and charts.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "category": { "type": "string", "description": "Category like Financeiro, Comercial, TI" },
+        "slides": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "timestamp" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string", "description": "Name of the creator" }
+      },
+      "required": ["title", "date", "category", "slides", "createdAt", "authorId", "authorName"]
     }
   },
   "firestore": {
@@ -152,6 +183,14 @@
     "/notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/Notification" },
       "description": "Collection of user notifications."
+    },
+    "/config/cleaning": {
+      "schema": { "$ref": "#/entities/CleaningRotation" },
+      "description": "Singleton config for cleaning rotation."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Collection of dynamic reports."
     }
   }
 }

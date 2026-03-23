@@ -3,8 +3,22 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, FileText, FolderOpen, Users, Briefcase, Calculator,
   Calendar, ArrowUpRight, Bell, Plus, LogOut, LogIn, X, Edit, Trash2,
-  Cake, User as UserIcon, Phone, Mail, Globe, Table, LayoutGrid, CheckCircle2, MessageSquare
+  Cake, User as UserIcon, Phone, Mail, Globe, Table, LayoutGrid, CheckCircle2, MessageSquare,
+  Eye, ChevronLeft, ChevronRight, Maximize2, FilePieChart,
+  BarChart3, Sparkles, Loader2, Layout, Type, Hash, DollarSign, PieChart as PieChartIcon,
+  ArrowRight, ArrowLeft, Download
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+import { GoogleGenAI, Type as GenAIType } from "@google/genai";
 import { auth, db, loginWithGoogle, logout } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, getDoc, setDoc, updateDoc, deleteDoc, where, limit, getDocs, writeBatch, increment } from 'firebase/firestore';
@@ -60,6 +74,886 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+type SlideType = 'title' | 'intro' | 'metrics' | 'chart' | 'cases' | 'vision' | 'thanks';
+
+interface SlideData {
+  type: SlideType;
+  title?: string;
+  subtitle?: string;
+  content?: string;
+  metrics?: { value: string; label: string; description?: string }[];
+  chartData?: { name: string; value: number }[];
+  cases?: { title: string; value: string; description: string; tag?: string }[];
+  points?: { title: string; content: string }[];
+  image?: string;
+}
+
+interface Report {
+  id: string;
+  title: string;
+  date: string;
+  category: string;
+  slides: SlideData[];
+  createdAt: any;
+  authorId: string;
+  authorName: string;
+}
+
+const ReportViewer = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: () => void; report: Report | null }) => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  if (!isOpen || !report) return null;
+
+  const renderSlide = (slide: SlideData) => {
+    switch (slide.type) {
+      case 'title':
+        return (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <div className="mb-12">
+              <h2 className="text-xl font-bold tracking-widest uppercase mb-2">DIAL</h2>
+            </div>
+            <h1 className="text-6xl md:text-8xl font-bold tracking-tight mb-6 text-[#1D1D1F] whitespace-pre-line">
+              {slide.title}
+            </h1>
+            <p className="text-2xl text-[#86868B] mb-24">{slide.subtitle}</p>
+            <div className="text-lg text-[#86868B]">
+              {slide.content}
+            </div>
+          </div>
+        );
+      case 'intro':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 h-full">
+            <div className="flex flex-col justify-center p-16 bg-[#1D1D1F] text-white">
+              <div className="mb-12">
+                <h2 className="text-xl font-bold tracking-widest uppercase">DIAL</h2>
+              </div>
+              <h1 className="text-7xl font-bold tracking-tight mb-8 whitespace-pre-line">{slide.title}</h1>
+              <p className="text-2xl text-gray-400 mb-4">{slide.subtitle}</p>
+              <p className="text-sm text-gray-500 mt-auto">{slide.content}</p>
+            </div>
+            <div className="bg-gray-100 flex items-center justify-center p-12">
+              <div className="w-full max-w-md aspect-square bg-white rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden">
+                 <img src={slide.image || "https://picsum.photos/seed/abstract/800/800"} alt="Abstract" className="w-full h-full object-cover opacity-80" referrerPolicy="no-referrer" />
+              </div>
+            </div>
+          </div>
+        );
+      case 'metrics':
+        return (
+          <div className="p-16 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-24">
+              <h2 className="text-4xl font-bold tracking-tight">{slide.title}</h2>
+              <span className="text-sm text-[#86868B]">{slide.subtitle}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-12 gap-y-24">
+              {slide.metrics?.map((m, i) => (
+                <div key={i}>
+                  <div className="text-6xl font-bold text-[#1D1D1F] mb-2">{m.value}</div>
+                  <div className="text-sm font-bold uppercase tracking-wider text-[#86868B] mb-4">{m.label}</div>
+                  <p className="text-[#86868B]">{m.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'chart':
+        return (
+          <div className="p-16 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-12">
+              <h2 className="text-4xl font-bold tracking-tight">{slide.title}</h2>
+              <span className="text-sm text-[#86868B]">{slide.subtitle}</span>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={slide.chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#86868B', fontSize: 12 }}
+                    dy={10}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#86868B', fontSize: 12 }}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: '#f8f8f8' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="#1D1D1F" 
+                    radius={[8, 8, 0, 0]} 
+                    barSize={60}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {slide.content && (
+              <p className="mt-8 text-center text-xl text-[#86868B] max-w-3xl mx-auto">
+                {slide.content}
+              </p>
+            )}
+          </div>
+        );
+      case 'cases':
+        return (
+          <div className="p-16 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-24">
+              <h2 className="text-4xl font-bold tracking-tight">{slide.title}</h2>
+              <span className="text-sm text-[#86868B]">{slide.subtitle}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-8 flex-1">
+              {slide.cases?.map((c, i) => (
+                <div key={i} className="bg-gray-50 p-12 rounded-[3rem] flex flex-col">
+                  <div className="text-4xl font-bold text-[#1D1D1F] mb-4">{c.value}</div>
+                  <h3 className="text-xl font-bold mb-6">{c.title}</h3>
+                  <p className="text-[#86868B] mb-8">{c.description}</p>
+                  {c.tag && <div className="mt-auto text-xs font-bold uppercase tracking-widest text-[#86868B]">{c.tag}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'vision':
+        return (
+          <div className="p-16 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-24">
+              <h2 className="text-4xl font-bold tracking-tight">{slide.title}</h2>
+              <span className="text-sm text-[#86868B]">{slide.subtitle}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-16 flex-1">
+              {slide.points?.map((p, i) => (
+                <div key={i}>
+                  <div className="text-sm font-bold uppercase tracking-widest text-[#0071E3] mb-4">{p.title}</div>
+                  <p className="text-xl text-[#1D1D1F] leading-relaxed">{p.content}</p>
+                </div>
+              ))}
+            </div>
+            {slide.content && (
+              <div className="mt-auto p-12 bg-gray-50 rounded-[2rem] text-center italic text-2xl text-[#1D1D1F]">
+                "{slide.content}"
+              </div>
+            )}
+          </div>
+        );
+      case 'thanks':
+        return (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <h1 className="text-9xl font-bold tracking-tighter mb-12 text-[#1D1D1F]">{slide.title || 'thanks'}</h1>
+            <p className="text-2xl text-[#86868B] mb-24">{slide.subtitle}</p>
+            <div className="text-xl font-bold tracking-widest uppercase text-[#1D1D1F]">{slide.content}</div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const nextSlide = () => setCurrentSlide(prev => (prev + 1) % report.slides.length);
+  const prevSlide = () => setCurrentSlide(prev => (prev - 1 + report.slides.length) % report.slides.length);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+      if (e.key === 'ArrowLeft') prevSlide();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [report, currentSlide]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] bg-white flex flex-col"
+    >
+      <div className="absolute top-8 right-8 z-[110] flex items-center gap-4 no-print">
+        <div className="text-sm font-medium text-[#86868B]">
+          {currentSlide + 1} / {report.slides.length}
+        </div>
+        <button 
+          onClick={() => window.print()}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors flex items-center gap-2 text-sm font-medium"
+          title="Exportar para PDF"
+        >
+          <Download className="w-5 h-5 text-[#1D1D1F]" />
+          <span className="hidden sm:inline">Exportar PDF</span>
+        </button>
+        <button 
+          onClick={onClose}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <X className="w-6 h-6 text-[#1D1D1F]" />
+        </button>
+      </div>
+
+      <div className="flex-1 relative overflow-hidden no-print">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="absolute inset-0"
+          >
+            {renderSlide(report.slides[currentSlide])}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Print-only version with all slides */}
+      <div className="hidden print:block">
+        {report.slides.map((slide, index) => (
+          <div key={index} className="page-break-after-always h-screen w-screen flex flex-col overflow-hidden bg-white relative">
+            {renderSlide(slide)}
+          </div>
+        ))}
+      </div>
+
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-8 z-[110] no-print">
+        <button 
+          onClick={prevSlide}
+          className="p-4 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-30"
+          disabled={currentSlide === 0}
+        >
+          <ChevronLeft className="w-8 h-8" />
+        </button>
+        <button 
+          onClick={nextSlide}
+          className="p-4 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-30"
+          disabled={currentSlide === report.slides.length - 1}
+        >
+          <ChevronRight className="w-8 h-8" />
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+const ReportCreator = ({ isOpen, onClose, onCreated, userProfile }: { isOpen: boolean; onClose: () => void; onCreated: () => void; userProfile: any }) => {
+  const [prompt, setPrompt] = useState('');
+  const [category, setCategory] = useState('Geral');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const categories = ['Geral', 'Financeiro', 'Comercial', 'TI', 'RH', 'Operacional'];
+
+  const generateReport = async () => {
+    if (!prompt) return;
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Generate a professional business report in JSON format based on this prompt: "${prompt}". 
+        The report should follow this structure:
+        {
+          "title": "Report Title",
+          "date": "Month Year",
+          "slides": [
+            {
+              "type": "title",
+              "title": "Main Title",
+              "subtitle": "Subtitle",
+              "content": "Footer text"
+            },
+            {
+              "type": "intro",
+              "title": "Intro Title",
+              "subtitle": "Intro Subtitle",
+              "content": "Intro Footer",
+              "image": "https://picsum.photos/seed/report/800/800"
+            },
+            {
+              "type": "metrics",
+              "title": "Key Metrics",
+              "subtitle": "Period",
+              "metrics": [
+                { "value": "10%", "label": "Growth", "description": "Description" }
+              ]
+            },
+            {
+              "type": "chart",
+              "title": "Performance Chart",
+              "subtitle": "Data overview",
+              "chartData": [
+                { "name": "Jan", "value": 100 },
+                { "name": "Feb", "value": 150 }
+              ],
+              "content": "Chart analysis"
+            },
+            {
+              "type": "cases",
+              "title": "Success Cases",
+              "subtitle": "Highlights",
+              "cases": [
+                { "title": "Case 1", "value": "$1M", "description": "Details", "tag": "Top Case" }
+              ]
+            },
+            {
+              "type": "vision",
+              "title": "Future Vision",
+              "subtitle": "2026 Goals",
+              "points": [
+                { "title": "Goal 1", "content": "Strategy details" }
+              ],
+              "content": "Closing quote"
+            },
+            {
+              "type": "thanks",
+              "title": "thanks",
+              "subtitle": "Final message",
+              "content": "Company tagline"
+            }
+          ]
+        }
+        Return ONLY the JSON. Max 10 slides. Use Portuguese for the content.`,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const reportData = JSON.parse(response.text);
+      
+      await addDoc(collection(db, 'reports'), {
+        ...reportData,
+        category,
+        createdAt: serverTimestamp(),
+        authorId: auth.currentUser?.uid,
+        authorName: userProfile?.displayName || auth.currentUser?.displayName || 'Usuário Dial'
+      });
+
+      onCreated();
+      onClose();
+      setPrompt('');
+    } catch (error) {
+      console.error("Error generating report:", error);
+      setError("Erro ao gerar relatório. Verifique sua conexão e tente novamente.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl"
+      >
+        <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-[#1D1D1F]">Criar Novo Relatório</h2>
+            <p className="text-[#86868B]">Use IA para gerar uma apresentação profissional</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-8 space-y-6">
+          {error && (
+            <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium">
+              {error}
+            </div>
+          )}
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-[#1D1D1F] uppercase tracking-widest mb-3">
+                Categoria
+              </label>
+              <select 
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-black outline-none transition-all"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-[#1D1D1F] uppercase tracking-widest mb-3">
+              O que você quer reportar?
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Ex: Relatório de vendas do Q1 2024, com foco em crescimento de 15% e novos clientes no setor público..."
+              className="w-full h-40 p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-black transition-all resize-none text-lg"
+            />
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={generateReport}
+              disabled={isGenerating || !prompt}
+              className="flex-1 bg-[#1D1D1F] hover:bg-black text-white rounded-2xl py-4 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Gerando com IA...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  Gerar Relatório Keynote
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-8 bg-gray-100 hover:bg-gray-200 text-[#1D1D1F] rounded-2xl font-bold transition-all"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const ReportEditor = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: () => void; report: Report | null }) => {
+  const [editedReport, setEditedReport] = useState<Report | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (report) setEditedReport(JSON.parse(JSON.stringify(report)));
+  }, [report]);
+
+  const handleSave = async () => {
+    if (!editedReport) return;
+    setIsSaving(true);
+    try {
+      const { id, ...data } = editedReport;
+      await updateDoc(doc(db, 'reports', id), data);
+      onClose();
+    } catch (error) {
+      console.error("Error updating report:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!isOpen || !editedReport) return null;
+
+  return (
+    <div className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+      >
+        <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-[#1D1D1F]">Editar Relatório</h2>
+            <p className="text-[#86868B]">Ajuste os detalhes e slides do relatório</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-bold text-[#1D1D1F] uppercase tracking-widest mb-3">Título</label>
+              <input 
+                type="text" 
+                value={editedReport.title}
+                onChange={(e) => setEditedReport({...editedReport, title: e.target.value})}
+                className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-black outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#1D1D1F] uppercase tracking-widest mb-3">Data</label>
+              <input 
+                type="text" 
+                value={editedReport.date}
+                onChange={(e) => setEditedReport({...editedReport, date: e.target.value})}
+                className="w-full bg-gray-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-black outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-[#1D1D1F]">Slides</h3>
+            {editedReport.slides.map((slide, sIdx) => (
+              <div key={sIdx} className="p-6 bg-gray-50 rounded-[2rem] space-y-4 border border-gray-100">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold uppercase tracking-widest text-[#86868B]">Slide {sIdx + 1} - {slide.type}</span>
+                  <button 
+                    onClick={() => {
+                      const newSlides = editedReport.slides.filter((_, i) => i !== sIdx);
+                      setEditedReport({...editedReport, slides: newSlides});
+                    }}
+                    className="text-red-500 hover:text-red-700 text-sm font-bold"
+                  >
+                    Remover
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#86868B] uppercase mb-1">Título do Slide</label>
+                    <input 
+                      type="text" 
+                      value={slide.title || ''}
+                      onChange={(e) => {
+                        const newSlides = [...editedReport.slides];
+                        newSlides[sIdx] = {...newSlides[sIdx], title: e.target.value};
+                        setEditedReport({...editedReport, slides: newSlides});
+                      }}
+                      className="w-full bg-white border-none rounded-xl px-4 py-2 focus:ring-2 focus:ring-black outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#86868B] uppercase mb-1">Subtítulo</label>
+                    <input 
+                      type="text" 
+                      value={slide.subtitle || ''}
+                      onChange={(e) => {
+                        const newSlides = [...editedReport.slides];
+                        newSlides[sIdx] = {...newSlides[sIdx], subtitle: e.target.value};
+                        setEditedReport({...editedReport, slides: newSlides});
+                      }}
+                      className="w-full bg-white border-none rounded-xl px-4 py-2 focus:ring-2 focus:ring-black outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#86868B] uppercase mb-1">Conteúdo/Rodapé</label>
+                  <textarea 
+                    value={slide.content || ''}
+                    onChange={(e) => {
+                      const newSlides = [...editedReport.slides];
+                      newSlides[sIdx] = {...newSlides[sIdx], content: e.target.value};
+                      setEditedReport({...editedReport, slides: newSlides});
+                    }}
+                    className="w-full bg-white border-none rounded-xl px-4 py-2 focus:ring-2 focus:ring-black outline-none h-20 resize-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-8 border-t border-gray-100 flex gap-4">
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-1 bg-[#1D1D1F] hover:bg-black text-white rounded-2xl py-4 font-bold transition-all disabled:opacity-50"
+          >
+            {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-8 bg-gray-100 hover:bg-gray-200 text-[#1D1D1F] rounded-2xl font-bold transition-all"
+          >
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const Reports = ({ userProfile }: { userProfile: any }) => {
+  const [reports, setReports] = useState<Report[]>([]);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [editingReport, setEditingReport] = useState<Report | null>(null);
+  const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (reports.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const reportId = params.get('reportId');
+      if (reportId) {
+        const report = reports.find(r => r.id === reportId);
+        if (report) {
+          setSelectedReport(report);
+        }
+      }
+    }
+  }, [reports]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const reportsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Report[];
+      setReports(reportsData);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reports');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const deleteReport = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Tem certeza que deseja excluir este relatório?')) {
+      try {
+        await deleteDoc(doc(db, 'reports', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `reports/${id}`);
+      }
+    }
+  };
+
+  const openInNewTab = (report: Report) => {
+    const url = `${window.location.origin}${window.location.pathname}?reportId=${report.id}`;
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="space-y-12">
+      <div className={selectedReport ? 'no-print' : ''}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight mb-2 text-[#1D1D1F]">
+              Relatórios & Performance
+            </h1>
+            <p className="text-xl text-[#86868B] font-medium tracking-tight">
+              Análises estratégicas e resultados da Dial Network.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsCreatorOpen(true)}
+            className="bg-[#1D1D1F] hover:bg-black text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-lg hover:shadow-xl active:scale-95"
+          >
+            <Plus className="w-5 h-5" />
+            Novo Relatório
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
+        {/* Static Report (Anual 2025) */}
+        <motion.div
+          whileHover={{ y: -8 }}
+          onClick={() => setSelectedReport({
+            id: 'static-2025',
+            title: 'Anual Performance Review 2025',
+            date: 'Dezembro 2025',
+            category: 'Geral',
+            authorId: 'system',
+            authorName: 'Dial Network',
+            createdAt: null,
+            slides: [
+              {
+                type: 'title',
+                title: 'Annual Performance\nReview 2025',
+                subtitle: 'The next level starts now',
+                content: 'Aguardando início — Pedro Novaes, IT Manager'
+              },
+              {
+                type: 'intro',
+                title: '2025.\nUm ano de inflexão.',
+                subtitle: 'Tecnologia, ritmo e execução.',
+                content: 'Período fiscal: 07/12/2024 a 30/11/2025',
+                image: 'https://picsum.photos/seed/abstract/800/800'
+              },
+              {
+                type: 'metrics',
+                title: 'Destaques Executivos',
+                subtitle: 'Período fiscal: 07/12/2024 a 06/12/2025',
+                metrics: [
+                  { value: '+12,4%', label: 'Crescimento no pipeline', description: 'Demanda acumulada no terceiro trimestre impulsionada por high-end, IA e Apple.' },
+                  { value: '+14%', label: 'Aumento no volume de entregas', description: 'Operação escalada mesmo com pressão por prazos e importação instável.' },
+                  { value: '-22%', label: 'Eficiência interna', description: 'Redução de tempo em processos jurídicos, cotações e workflow com IA.' },
+                  { value: '+1 unit', label: 'Estrutura operacional', description: 'POP detalhado pelo CEO e organograma consolidado para 2026.' },
+                  { value: '+30%', label: 'Parcerias estratégicas', description: 'Novo acordo encurtando prazos de importação.' },
+                  { value: '+2 níveis', label: 'Maturidade', description: 'Melhoria direta na qualidade técnica e gestão da cadência.' }
+                ]
+              },
+              {
+                type: 'chart',
+                title: 'Volume de Oportunidades',
+                subtitle: 'Licitações 2025',
+                chartData: [
+                  { name: 'Gerenciadas', value: 2733 },
+                  { name: 'Participadas', value: 1003 },
+                  { name: 'Ganhas', value: 168 }
+                ],
+                content: 'Conversão consistente mesmo em um cenário competitivo agressivo.'
+              },
+              {
+                type: 'cases',
+                title: 'Cases que definiram o ano',
+                subtitle: '2025 Highlights',
+                cases: [
+                  { title: 'Fundação Cearense', value: 'R$ 500k', description: 'Supercomputador, TR extremamente complexo. 100% de acerto técnico.', tag: 'Case do Ano' },
+                  { title: 'SENAC Goiás', value: 'R$ 1,8 mi', description: 'Multi-linha Apple (iMac, iPad, MacBook). Operação limpa.', tag: 'Apple Case 2025' },
+                  { title: 'UDESC', value: 'R$ 800k', description: 'MacBooks + iMacs para modernização de laboratórios.', tag: 'Apple Case 2025' }
+                ]
+              },
+              {
+                type: 'vision',
+                title: 'O que vai redefinir 2026',
+                subtitle: 'Estratégia 2026',
+                points: [
+                  { title: '01. Demanda High-End & IA', content: 'Crescimento sólido em GPU, workstations e supermáquinas.' },
+                  { title: '02. Ecossistema Apple', content: 'Apple deixa de ser nicho e vira padrão em educação e saúde.' },
+                  { title: '03. TRs Técnicos', content: 'A vantagem competitiva será a interpretação técnica + resposta rápida.' },
+                  { title: '04. Logística', content: '2026 exigirá previsibilidade e controle extremo de lead time.' }
+                ],
+                content: '2026 não será um ano de estabilidade. Será um ano de sofisticação.'
+              },
+              {
+                type: 'thanks',
+                title: 'thanks',
+                subtitle: 'A DIAL segue pronta para entregar o próximo nível.',
+                content: '2026 IS OURS.'
+              }
+            ]
+          })}
+          className="group relative bg-white rounded-[2.5rem] p-8 shadow-sm hover:shadow-xl transition-all cursor-pointer overflow-hidden border border-gray-100"
+        >
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+            <FilePieChart className="w-32 h-32" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-16 h-16 bg-[#1D1D1F] rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <FilePieChart className="w-8 h-8 text-white" />
+              </div>
+              <span className="px-3 py-1 bg-gray-100 text-[#1D1D1F] text-xs font-bold rounded-full uppercase tracking-widest">Geral</span>
+            </div>
+            <h3 className="text-2xl font-bold text-[#1D1D1F] mb-2">Anual Performance Review 2025</h3>
+            <p className="text-[#86868B] mb-8">Relatório consolidado do período fiscal 2025.</p>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-sm font-bold uppercase tracking-widest text-[#86868B]">Dezembro 2025</span>
+                <span className="text-xs text-[#86868B]">por Dial Network</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#0071E3] font-semibold group-hover:translate-x-2 transition-transform">
+                Ver Relatório
+                <ChevronRight className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Dynamic Reports */}
+        {reports.map((report) => (
+          <motion.div
+            key={report.id}
+            whileHover={{ y: -8 }}
+            onClick={() => setSelectedReport(report)}
+            className="group relative bg-white rounded-[2.5rem] p-8 shadow-sm hover:shadow-xl transition-all cursor-pointer overflow-hidden border border-gray-100"
+          >
+            <div className="absolute top-8 right-8 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingReport(report);
+                }}
+                className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
+              >
+                <Edit className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openInNewTab(report);
+                }}
+                className="p-2 bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <Maximize2 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => deleteReport(report.id, e)}
+                className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+              <BarChart3 className="w-32 h-32" />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <BarChart3 className="w-8 h-8 text-white" />
+                </div>
+                <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full uppercase tracking-widest">{report.category || 'Geral'}</span>
+              </div>
+              <h3 className="text-2xl font-bold text-[#1D1D1F] mb-2">{report.title}</h3>
+              <p className="text-[#86868B] mb-8">Relatório gerado via IA estratégica.</p>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold uppercase tracking-widest text-[#86868B]">{report.date}</span>
+                  <span className="text-xs text-[#86868B]">por {report.authorName}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[#0071E3] font-semibold group-hover:translate-x-2 transition-transform">
+                  Ver Relatório
+                  <ChevronRight className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+
+        {reports.length === 0 && !loading && (
+          <div className="col-span-full py-20 text-center bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
+            <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-xl text-gray-400 font-medium">Nenhum relatório personalizado ainda.</p>
+            <button 
+              onClick={() => setIsCreatorOpen(true)}
+              className="mt-4 text-[#0071E3] font-bold hover:underline"
+            >
+              Crie o primeiro agora
+            </button>
+          </div>
+        )}
+      </div>
+
+      </div>
+      <AnimatePresence>
+        {selectedReport && (
+          <ReportViewer 
+            isOpen={!!selectedReport} 
+            onClose={() => setSelectedReport(null)} 
+            report={selectedReport}
+          />
+        )}
+      </AnimatePresence>
+
+      <ReportCreator 
+        isOpen={isCreatorOpen} 
+        onClose={() => setIsCreatorOpen(false)}
+        onCreated={() => {}}
+        userProfile={userProfile}
+      />
+
+      <ReportEditor 
+        isOpen={!!editingReport}
+        onClose={() => setEditingReport(null)}
+        report={editingReport}
+      />
+    </div>
+  );
+};
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -130,8 +1024,10 @@ function IntranetApp() {
   const [usersList, setUsersList] = useState<any[]>([]);
   const [motivationalQuote, setMotivationalQuote] = useState('');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [profileData, setProfileData] = useState({ displayName: '', gender: '', birthDate: '', phone: '' });
+  const [profileData, setProfileData] = useState({ displayName: '', gender: '', birthDate: '', phone: '', jobTitle: '', department: '' });
   const [currentUserData, setCurrentUserData] = useState<any>(null);
+  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
+  const [editUserData, setEditUserData] = useState({ id: '', displayName: '', jobTitle: '', department: '', phone: '', birthDate: '', gender: '' });
   const [birthdays, setBirthdays] = useState<any[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
@@ -159,8 +1055,10 @@ function IntranetApp() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [currentTab, setCurrentTab] = useState<'home' | 'cotacoes'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'wiki' | 'reports'>('home');
+  const [wikiTab, setWikiTab] = useState<'cotacoes' | 'limpeza' | 'rh' | 'outros'>('cotacoes');
   const [guides, setGuides] = useState<any[]>([]);
+  const [cleaningConfig, setCleaningConfig] = useState<any>(null);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [isEditGuideModalOpen, setIsEditGuideModalOpen] = useState(false);
   const [newGuide, setNewGuide] = useState({ title: '', content: '', category: 'Cotações' });
@@ -172,17 +1070,112 @@ function IntranetApp() {
   useEffect(() => {
     const fetchDollarRate = async () => {
       try {
-        const response = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+        const response = await fetch('/api/dollar-rate');
+        if (!response.ok) throw new Error('Failed to fetch from proxy');
         const data = await response.json();
-        setDollarRate(parseFloat(data.USDBRL.bid).toFixed(2));
+        if (data?.USDBRL?.bid) {
+          setDollarRate(parseFloat(data.USDBRL.bid).toFixed(2));
+        } else {
+          throw new Error('Invalid data format');
+        }
       } catch (error) {
         console.error('Error fetching dollar rate:', error);
+        // Set a default value if fetch fails and no rate is set
+        if (!dollarRate) setDollarRate('5.42');
       }
     };
     fetchDollarRate();
     const interval = setInterval(fetchDollarRate, 300000); // 5 minutes
     return () => clearInterval(interval);
-  }, []);
+  }, [dollarRate]);
+
+  const CLEANING_TASKS = [
+    "BANHEIRO",
+    "SACOS DE LIXO",
+    "COZINHA",
+    "LOG (MOP)",
+    "LOG (VASSOURA)",
+    "LICITA/REUNIÃO (MOP)",
+    "LICITA/REUNIÃO (VASSOURA)",
+    "ESCADAS",
+    "VIDROS/MESAS",
+    "COZINHA/CORREDOR MOP + 1"
+  ];
+
+  const INITIAL_PARTICIPANTS = [
+    "MATHEUS M",
+    "GUILHERME G",
+    "PEDRO N",
+    "G BESSELLI",
+    "CRISTIANE M",
+    "KEZIA P",
+    "EDUARDO C",
+    "CARLOS R",
+    "ALESSANDRO P",
+    "CAMILA ROSSI"
+  ];
+
+  useEffect(() => {
+    if (!user || userStatus !== 'approved') return;
+    const unsub = onSnapshot(doc(db, 'config', 'cleaning'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        // Ensure data has all required fields for the new schema
+        const needsUpdate = !data.tasks || 
+                           !data.participants || 
+                           data.participants.length === 0 || 
+                           typeof data.manualOverride !== 'object';
+
+        if (isAdmin && needsUpdate) {
+          updateDoc(doc(db, 'config', 'cleaning'), {
+            tasks: data.tasks || CLEANING_TASKS,
+            participants: (data.participants && data.participants.length > 0) ? data.participants : INITIAL_PARTICIPANTS,
+            manualOverride: typeof data.manualOverride === 'object' ? data.manualOverride : {},
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        setCleaningConfig({
+          ...data,
+          tasks: data.tasks || CLEANING_TASKS,
+          participants: (data.participants && data.participants.length > 0) ? data.participants : INITIAL_PARTICIPANTS,
+          manualOverride: typeof data.manualOverride === 'object' ? data.manualOverride : {},
+          currentIndex: data.currentIndex ?? 0
+        });
+        
+        // Auto-rotation logic (only if admin)
+        if (isAdmin) {
+          const now = new Date();
+          const isFriday = now.getDay() === 5;
+          const lastDate = data.lastRotationDate?.toDate();
+          const isDifferentDay = !lastDate || lastDate.toDateString() !== now.toDateString();
+          
+          if (isFriday && isDifferentDay && (data.participants?.length > 0 || INITIAL_PARTICIPANTS.length > 0)) {
+            const participants = data.participants?.length > 0 ? data.participants : INITIAL_PARTICIPANTS;
+            const nextIndex = (data.currentIndex + 1) % participants.length;
+            updateDoc(doc(db, 'config', 'cleaning'), {
+              currentIndex: nextIndex,
+              lastRotationDate: serverTimestamp(),
+              manualOverride: {}, // Clear overrides on auto-rotation
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+      } else if (isAdmin) {
+        // Initialize default config if not exists
+        setDoc(doc(db, 'config', 'cleaning'), {
+          participants: INITIAL_PARTICIPANTS,
+          tasks: CLEANING_TASKS,
+          currentIndex: 0,
+          lastRotationDate: serverTimestamp(),
+          manualOverride: {},
+          updatedAt: serverTimestamp()
+        });
+      }
+    }, (error) => console.error('Error fetching cleaning config:', error));
+    return () => unsub();
+  }, [user, userStatus, isAdmin]);
 
   const logAction = async (userId: string, action: string, details?: any) => {
     try {
@@ -237,6 +1230,13 @@ function IntranetApp() {
         setIsAdmin(false);
         setUserStatus(null);
         setLoading(false);
+      } else {
+        // Check for reportId in URL
+        const params = new URLSearchParams(window.location.search);
+        const reportId = params.get('reportId');
+        if (reportId) {
+          setCurrentTab('reports');
+        }
       }
     });
     return () => unsubscribeAuth();
@@ -469,12 +1469,27 @@ function IntranetApp() {
           displayName: data.displayName || '',
           gender: data.gender || '',
           birthDate: data.birthDate || '',
-          phone: data.phone || ''
+          phone: data.phone || '',
+          jobTitle: data.jobTitle || '',
+          department: data.department || ''
         });
       }
       setIsProfileModalOpen(true);
     } catch (error) {
       console.error('Error opening profile modal:', error);
+    }
+  };
+
+  const handleAdminUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !isAdmin) return;
+    try {
+      const { id, ...data } = editUserData;
+      await updateDoc(doc(db, 'users', id), data);
+      await logAction(user.uid, `Perfil do usuário ${data.displayName || id} atualizado por admin`);
+      setIsEditUserModalOpen(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${editUserData.id}`);
     }
   };
 
@@ -685,10 +1700,418 @@ function IntranetApp() {
   );
 
   const filteredGuides = guides.filter(guide => 
-    guide.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    guide.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    guide.category.toLowerCase().includes(searchQuery.toLowerCase())
+    (guide.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     guide.content.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (wikiTab === 'cotacoes' ? guide.category === 'Cotações' : 
+     wikiTab === 'rh' ? guide.category === 'RH' : 
+     wikiTab === 'outros' ? !['Cotações', 'RH'].includes(guide.category) : true)
   );
+
+  const QuotationCalculator = () => {
+    const [usdPrice, setUsdPrice] = useState<string>('');
+    const [weightKg, setWeightKg] = useState<string>('');
+    const [customDollar, setCustomDollar] = useState<string>(dollarRate || '5.42');
+
+    useEffect(() => {
+      if (dollarRate && !usdPrice) setCustomDollar(dollarRate);
+    }, [dollarRate]);
+
+    const priceNum = parseFloat(usdPrice) || 0;
+    const weightNum = parseFloat(weightKg) || 0;
+    const dollarNum = parseFloat(customDollar) || 5.42;
+
+    const brlBase = priceNum * dollarNum;
+    const shipping = weightNum * 25;
+    const saleTax = brlBase * 0.07;
+    const total = brlBase + shipping + saleTax;
+
+    return (
+      <div className="bg-[#F5F5F7] rounded-3xl p-6 space-y-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
+              <Calculator className="w-5 h-5" />
+            </div>
+            <h3 className="text-lg font-bold">Calculadora de Cotação</h3>
+          </div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-gray-100">
+            Dólar Atual: R$ {dollarRate || '5.42'}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Valor em Dólar ($)</label>
+            <input 
+              type="number" 
+              value={usdPrice} 
+              onChange={(e) => setUsdPrice(e.target.value)}
+              className="w-full bg-white border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+              placeholder="Ex: 1999.00"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Peso (KG)</label>
+            <input 
+              type="number" 
+              value={weightKg} 
+              onChange={(e) => setWeightKg(e.target.value)}
+              className="w-full bg-white border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+              placeholder="Ex: 6"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Cotação Dólar (R$)</label>
+            <input 
+              type="number" 
+              value={customDollar} 
+              onChange={(e) => setCustomDollar(e.target.value)}
+              className="w-full bg-white border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+              placeholder="Ex: 5.42"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Conversão Base ({usdPrice || '0'} * {customDollar})</span>
+              <span className="font-semibold">{brlBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Frete EUA (R$ 25,00 * {weightKg || '0'}kg)</span>
+              <span className="font-semibold text-orange-600">+ {shipping.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Sale TAX (7% sobre base)</span>
+              <span className="font-semibold text-orange-600">+ {saleTax.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+            <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+              <span className="text-lg font-bold">Total Estimado</span>
+              <span className="text-2xl font-black text-blue-600">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+          </div>
+
+          <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100/50">
+            <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3">Como funciona a cotação?</h4>
+            <ul className="space-y-2 text-[11px] text-blue-800/70 leading-relaxed">
+              <li className="flex gap-2">
+                <span className="font-bold text-blue-600">1.</span>
+                <span>Buscamos o produto desejado (Ex: Apple Mac Studio).</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-blue-600">2.</span>
+                <span>Convertemos o valor anunciado em dólar para a cotação atual (R$ {customDollar}).</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-blue-600">3.</span>
+                <span><strong>Frete EUA:</strong> Calculado pelo peso total (R$ 25,00 x KG).</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-blue-600">4.</span>
+                <span><strong>Sale TAX:</strong> Taxa de 7% sobre o valor convertido em real.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const CleaningRotation = () => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [showFuture, setShowFuture] = useState(false);
+    const [participants, setParticipants] = useState<string[]>([]);
+    const [tasks, setTasks] = useState<string[]>([]);
+    const [newParticipant, setNewParticipant] = useState('');
+    const [newTask, setNewTask] = useState('');
+
+    useEffect(() => {
+      if (cleaningConfig) {
+        setParticipants(cleaningConfig.participants || []);
+        setTasks(cleaningConfig.tasks || []);
+      }
+    }, [cleaningConfig]);
+
+    if (!cleaningConfig) return null;
+
+    const getAssignments = (indexOffset: number) => {
+      const p = cleaningConfig.participants;
+      const t = cleaningConfig.tasks;
+      if (!p || !t || p.length === 0 || t.length === 0) return [];
+
+      const baseIndex = (cleaningConfig.currentIndex + indexOffset) % p.length;
+      return t.map((task, i) => {
+        const participantIndex = (baseIndex + i) % p.length;
+        const manual = indexOffset === 0 ? cleaningConfig.manualOverride?.[task] : null;
+        return {
+          task,
+          person: manual || p[participantIndex]
+        };
+      });
+    };
+
+    const currentAssignments = getAssignments(0);
+
+    const handleSave = async () => {
+      await updateDoc(doc(db, 'config', 'cleaning'), {
+        participants,
+        tasks,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditing(false);
+    };
+
+    const handleManualOverride = async (task: string, name: string) => {
+      const newOverrides = { ...(cleaningConfig.manualOverride || {}) };
+      if (newOverrides[task] === name) {
+        delete newOverrides[task];
+      } else {
+        newOverrides[task] = name;
+      }
+      await updateDoc(doc(db, 'config', 'cleaning'), {
+        manualOverride: newOverrides,
+        updatedAt: serverTimestamp()
+      });
+    };
+
+    const getNextFridays = (count: number) => {
+      const fridays = [];
+      let current = new Date();
+      // Find next Friday
+      while (current.getDay() !== 5) {
+        current.setDate(current.getDate() + 1);
+      }
+      for (let i = 0; i < count; i++) {
+        const d = new Date(current);
+        d.setDate(d.getDate() + i * 7);
+        fridays.push(d);
+      }
+      return fridays;
+    };
+
+    return (
+      <div className="bg-white rounded-3xl p-8 shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-gray-100/50">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold tracking-tight">Rodízio de Limpeza</h3>
+              <p className="text-sm text-gray-500">Escala de Sexta-feira</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowFuture(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+              Ver Próximos
+            </button>
+            {isAdmin && (
+              <button 
+                onClick={() => setIsEditing(!isEditing)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <Edit className="w-5 h-5 text-gray-400" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {currentAssignments.map((item, idx) => (
+            <div 
+              key={idx} 
+              className={`p-6 rounded-[2rem] border transition-all duration-300 ${
+                cleaningConfig.manualOverride?.[item.task] 
+                  ? 'bg-amber-50 border-amber-100 shadow-sm' 
+                  : 'bg-emerald-50/50 border-emerald-100/50 hover:bg-emerald-50'
+              }`}
+            >
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest">{item.task}</span>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-emerald-900">{item.person}</h4>
+                  {isAdmin && (
+                    <select 
+                      onChange={(e) => handleManualOverride(item.task, e.target.value)}
+                      className="opacity-0 hover:opacity-100 focus:opacity-100 text-[10px] bg-white border border-emerald-200 rounded-lg px-2 py-1 outline-none cursor-pointer transition-opacity"
+                      value={item.person}
+                    >
+                      {participants.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {cleaningConfig.manualOverride?.[item.task] && (
+                  <span className="text-[9px] text-amber-600 font-bold mt-1">Alteração Manual</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {isEditing && (
+          <div className="space-y-6 p-6 bg-gray-50 rounded-[2.5rem] border border-gray-100">
+            <div>
+              <h4 className="text-sm font-bold mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4" /> Participantes
+              </h4>
+              <div className="flex gap-2 mb-4">
+                <input 
+                  type="text" 
+                  value={newParticipant} 
+                  onChange={(e) => setNewParticipant(e.target.value)}
+                  className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                  placeholder="Novo participante"
+                />
+                <button 
+                  onClick={() => {
+                    if (newParticipant.trim()) {
+                      setParticipants([...participants, newParticipant.trim()]);
+                      setNewParticipant('');
+                    }
+                  }}
+                  className="bg-emerald-600 text-white p-2 rounded-xl hover:bg-emerald-700"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {participants.map((p, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-full group">
+                    <span className="text-xs font-medium">{p}</span>
+                    <button 
+                      onClick={() => setParticipants(participants.filter((_, i) => i !== idx))}
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-bold mb-4 flex items-center gap-2">
+                <LayoutGrid className="w-4 h-4" /> Tarefas
+              </h4>
+              <div className="flex gap-2 mb-4">
+                <input 
+                  type="text" 
+                  value={newTask} 
+                  onChange={(e) => setNewTask(e.target.value)}
+                  className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                  placeholder="Nova tarefa"
+                />
+                <button 
+                  onClick={() => {
+                    if (newTask.trim()) {
+                      setTasks([...tasks, newTask.trim()]);
+                      setNewTask('');
+                    }
+                  }}
+                  className="bg-emerald-600 text-white p-2 rounded-xl hover:bg-emerald-700"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tasks.map((t, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-full group">
+                    <span className="text-xs font-medium">{t}</span>
+                    <button 
+                      onClick={() => setTasks(tasks.filter((_, i) => i !== idx))}
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => setIsEditing(false)}
+                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-xl text-sm font-bold"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSave}
+                className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200"
+              >
+                Salvar Configuração
+              </button>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {showFuture && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white rounded-[3rem] w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+              >
+                <div className="p-8 border-bottom border-gray-100 flex items-center justify-between bg-emerald-900 text-white">
+                  <div>
+                    <h3 className="text-2xl font-black tracking-tight">Próximas Semanas</h3>
+                    <p className="text-emerald-200 text-sm">Escala de rodízio projetada</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowFuture(false)}
+                    className="p-3 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-auto p-8">
+                  <div className="inline-block min-w-full align-middle">
+                    <table className="min-w-full border-separate border-spacing-0">
+                      <thead>
+                        <tr>
+                          <th className="sticky left-0 z-10 bg-gray-50 p-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200">Data</th>
+                          {tasks.map(t => (
+                            <th key={t} className="p-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 min-w-[150px]">{t}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getNextFridays(10).map((date, weekIdx) => {
+                          const assignments = getAssignments(weekIdx);
+                          return (
+                            <tr key={weekIdx} className="hover:bg-gray-50 transition-colors">
+                              <td className="sticky left-0 z-10 bg-white p-4 text-sm font-bold text-emerald-900 border-b border-gray-100 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                {date.toLocaleDateString('pt-BR')}
+                              </td>
+                              {assignments.map((a, i) => (
+                                <td key={i} className="p-4 text-sm text-gray-600 border-b border-gray-100">
+                                  {a.person}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
   if (loading) {
     return <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center">Carregando...</div>;
@@ -773,12 +2196,12 @@ function IntranetApp() {
     <div className="min-h-screen bg-[#F5F5F7] font-sans text-[#1D1D1F] selection:bg-[#0071E3] selection:text-white">
       {/* Dollar Rate Bar */}
       {dollarRate && (
-        <div className="bg-[#1D1D1F] text-white text-xs py-1.5 px-4 text-center tracking-wide">
+        <div className="bg-[#1D1D1F] text-white text-xs py-1.5 px-4 text-center tracking-wide no-print">
           Última cotação do Dólar: <span className="font-semibold">R$ {dollarRate}</span>
         </div>
       )}
       {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-gray-200/50">
+      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-gray-200/50 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center">
             <div className="bg-black text-white px-2.5 py-1 rounded-sm flex items-center justify-center">
@@ -903,10 +2326,16 @@ function IntranetApp() {
               Início
             </button>
             <button 
-              onClick={() => setCurrentTab('cotacoes')}
-              className={`h-full flex items-center text-sm font-medium border-b-2 transition-colors ${currentTab === 'cotacoes' ? 'border-[#0071E3] text-[#1D1D1F]' : 'border-transparent text-[#86868B] hover:text-[#1D1D1F]'}`}
+              onClick={() => setCurrentTab('wiki')}
+              className={`h-full flex items-center text-sm font-medium border-b-2 transition-colors ${currentTab === 'wiki' ? 'border-[#0071E3] text-[#1D1D1F]' : 'border-transparent text-[#86868B] hover:text-[#1D1D1F]'}`}
             >
-              Guias de Cotação
+              Wiki & Guias
+            </button>
+            <button 
+              onClick={() => setCurrentTab('reports')}
+              className={`h-full flex items-center text-sm font-medium border-b-2 transition-colors ${currentTab === 'reports' ? 'border-[#0071E3] text-[#1D1D1F]' : 'border-transparent text-[#86868B] hover:text-[#1D1D1F]'}`}
+            >
+              Reports
             </button>
           </div>
         </div>
@@ -914,7 +2343,7 @@ function IntranetApp() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-24">
-        {currentTab === 'home' ? (
+        {currentTab === 'home' && (
           <>
             <motion.section 
               initial={{ opacity: 0, y: 20 }}
@@ -1256,21 +2685,23 @@ function IntranetApp() {
         </motion.div>
       </div>
           </>
-        ) : (
+        )}
+
+        {currentTab === 'wiki' && (
           <div className="space-y-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-4xl md:text-5xl font-semibold tracking-tight mb-2 text-[#1D1D1F]">
-                  Guias de Cotação
+                  Wiki & Guias
                 </h1>
                 <p className="text-xl text-[#86868B] font-medium tracking-tight">
-                  Tutoriais e manuais para o time comercial.
+                  Base de conhecimento e manuais da Dial Network.
                 </p>
               </div>
               {isAdmin && (
                 <button 
-                  onClick={() => { setEditingGuide(null); setIsGuideModalOpen(true); }}
-                  className="bg-[#1D1D1F] hover:bg-black text-white px-5 py-2.5 rounded-full font-medium flex items-center gap-2 transition-colors shadow-sm"
+                  onClick={() => { setNewGuide({ ...newGuide, category: wikiTab === 'cotacoes' ? 'Cotações' : wikiTab === 'rh' ? 'RH' : 'Geral' }); setEditingGuide(null); setIsGuideModalOpen(true); }}
+                  className="bg-[#1D1D1F] hover:bg-black text-white px-5 py-2.5 rounded-full font-medium flex items-center gap-2 transition-colors shadow-sm self-start"
                 >
                   <Plus className="w-5 h-5" />
                   Novo Guia
@@ -1278,85 +2709,116 @@ function IntranetApp() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredGuides.length === 0 ? (
-                <div className="col-span-full bg-white rounded-3xl p-12 text-center shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-gray-100/50">
-                  <div className="w-16 h-16 bg-[#F5F5F7] rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-[#86868B]" />
-                  </div>
-                  <h3 className="text-xl font-semibold tracking-tight mb-2">Nenhum guia encontrado</h3>
-                  <p className="text-[#86868B]">Não há guias cadastrados no momento.</p>
-                </div>
-              ) : (
-                filteredGuides.map((guide) => (
-                  <motion.div 
-                    key={guide.id}
-                    onClick={() => {
-                      setSelectedGuide(guide);
-                      if (user) logAction(user.uid, `Visualizou guia: ${guide.title}`, { guideId: guide.id });
-                    }}
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ duration: 0.2 }}
-                    className="bg-white rounded-3xl p-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-gray-100/50 cursor-pointer group relative overflow-hidden flex flex-col h-full"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium px-3 py-1 bg-blue-50 text-blue-600 rounded-full">
+            {/* Wiki Tabs */}
+            <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
+              <button 
+                onClick={() => setWikiTab('cotacoes')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${wikiTab === 'cotacoes' ? 'bg-white text-[#1D1D1F] shadow-sm' : 'text-gray-500 hover:text-black'}`}
+              >
+                Cotações
+              </button>
+              <button 
+                onClick={() => setWikiTab('limpeza')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${wikiTab === 'limpeza' ? 'bg-white text-[#1D1D1F] shadow-sm' : 'text-gray-500 hover:text-black'}`}
+              >
+                Limpeza
+              </button>
+              <button 
+                onClick={() => setWikiTab('rh')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${wikiTab === 'rh' ? 'bg-white text-[#1D1D1F] shadow-sm' : 'text-gray-500 hover:text-black'}`}
+              >
+                RH
+              </button>
+              <button 
+                onClick={() => setWikiTab('outros')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${wikiTab === 'outros' ? 'bg-white text-[#1D1D1F] shadow-sm' : 'text-gray-500 hover:text-black'}`}
+              >
+                Outros
+              </button>
+            </div>
+
+            {wikiTab === 'cotacoes' && (
+              <div className="space-y-8">
+                <QuotationCalculator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredGuides.map((guide) => (
+                    <motion.div 
+                      key={guide.id}
+                      onClick={() => {
+                        setSelectedGuide(guide);
+                        if (user) logAction(user.uid, `Visualizou guia: ${guide.title}`, { guideId: guide.id });
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      className="bg-white rounded-3xl p-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-gray-100/50 cursor-pointer group flex flex-col h-full"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
                           {guide.category}
                         </span>
-                        {guide.createdAt && (
-                          <span className="text-[10px] text-[#86868B]">
-                            {new Date(guide.createdAt.seconds * 1000).toLocaleDateString('pt-BR')}
-                          </span>
-                        )}
-                        {guide.authorName && (
-                          <span className="text-[10px] text-[#86868B] bg-gray-100 px-1.5 py-0.5 rounded">
-                            {guide.authorName}
-                          </span>
+                        {isAdmin && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingGuide(guide); setIsEditGuideModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit className="w-4 h-4" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setGuideToDelete(guide.id); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         )}
                       </div>
-                      {isAdmin && (
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingGuide(guide);
-                              setIsEditGuideModalOpen(true);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors bg-white rounded-full shadow-sm border border-gray-100"
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setGuideToDelete(guide.id);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-red-600 transition-colors bg-white rounded-full shadow-sm border border-gray-100"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <h3 className="text-xl font-semibold tracking-tight mb-3 group-hover:text-[#0071E3] transition-colors">
-                      {guide.title}
-                    </h3>
-                    <p className="text-[#86868B] leading-relaxed line-clamp-3 text-sm flex-grow">
-                      {guide.content}
-                    </p>
-                  </motion.div>
-                ))
-              )}
-            </div>
+                      <h3 className="text-xl font-bold tracking-tight mb-2 group-hover:text-blue-600 transition-colors">{guide.title}</h3>
+                      <p className="text-sm text-gray-500 line-clamp-3 leading-relaxed">{guide.content}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {wikiTab === 'limpeza' && (
+              <div className="max-w-4xl mx-auto w-full">
+                <CleaningRotation />
+              </div>
+            )}
+
+            {(wikiTab === 'rh' || wikiTab === 'outros') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredGuides.length === 0 ? (
+                  <div className="col-span-full py-20 text-center">
+                    <FileText className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                    <p className="text-gray-400 font-medium">Nenhum guia nesta categoria</p>
+                  </div>
+                ) : (
+                  filteredGuides.map((guide) => (
+                    <motion.div 
+                      key={guide.id}
+                      onClick={() => setSelectedGuide(guide)}
+                      whileHover={{ scale: 1.02 }}
+                      className="bg-white rounded-3xl p-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-gray-100/50 cursor-pointer group flex flex-col h-full"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+                          {guide.category}
+                        </span>
+                        {isAdmin && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingGuide(guide); setIsEditGuideModalOpen(true); }} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit className="w-4 h-4" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setGuideToDelete(guide.id); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                      </div>
+                      <h3 className="text-xl font-bold tracking-tight mb-2 group-hover:text-blue-600 transition-colors">{guide.title}</h3>
+                      <p className="text-sm text-gray-500 line-clamp-3 leading-relaxed">{guide.content}</p>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
+        )}
+
+        {currentTab === 'reports' && (
+          <Reports userProfile={currentUserData} />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 border-t border-gray-100 mt-12">
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 border-t border-gray-100 mt-12 no-print">
         <div className="flex flex-col md:flex-row justify-between items-center gap-8 text-center md:text-left">
           <div className="space-y-1">
             <p className="text-sm font-bold text-[#1D1D1F]">Hub Office Home</p>
@@ -1705,6 +3167,24 @@ function IntranetApp() {
           </div>
         )}
       </AnimatePresence>
+      {/* Floating Action Button (FAB) for Helpdesk */}
+      {user && userStatus === 'approved' && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileHover={{ scale: 1.1, y: -5 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsHelpdeskModalOpen(true)}
+          className="fixed bottom-8 right-8 z-[60] bg-[#1D1D1F] text-white p-5 rounded-full shadow-2xl flex items-center justify-center group hover:bg-black transition-all"
+          title="Abrir Chamado"
+        >
+          <FileText className="w-6 h-6" />
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 whitespace-nowrap font-bold text-sm uppercase tracking-wider">
+            Abrir Chamado
+          </span>
+        </motion.button>
+      )}
+
       {/* Profile Modal */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -1733,6 +3213,28 @@ function IntranetApp() {
                   onChange={(e) => setProfileData({ ...profileData, displayName: e.target.value })}
                   placeholder="Como quer ser chamado?"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cargo</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={profileData.jobTitle}
+                    onChange={(e) => setProfileData({ ...profileData, jobTitle: e.target.value })}
+                    placeholder="Ex: Analista de TI"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Setor</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={profileData.department}
+                    onChange={(e) => setProfileData({ ...profileData, department: e.target.value })}
+                    placeholder="Ex: Suporte"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1847,6 +3349,24 @@ function IntranetApp() {
                     <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                       <button 
                         onClick={() => {
+                          setEditUserData({
+                            id: u.id,
+                            displayName: u.displayName || '',
+                            jobTitle: u.jobTitle || '',
+                            department: u.department || '',
+                            phone: u.phone || '',
+                            birthDate: u.birthDate || '',
+                            gender: u.gender || ''
+                          });
+                          setIsEditUserModalOpen(true);
+                        }}
+                        className="p-2 text-gray-500 hover:text-emerald-600 transition-colors bg-white rounded-lg shadow-sm"
+                        title="Editar Usuário"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => {
                           setViewingUser(u);
                           fetchUserLogs(u.id);
                           setIsLogsModalOpen(true);
@@ -1886,6 +3406,109 @@ function IntranetApp() {
                   </div>
                 ))}
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Edit User Modal */}
+      <AnimatePresence>
+        {isEditUserModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-black/5 flex items-center justify-between bg-gray-50">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Edit className="w-5 h-5 text-emerald-600" />
+                  Editar Usuário
+                </h3>
+                <button onClick={() => setIsEditUserModalOpen(false)} className="p-2 hover:bg-black/5 rounded-full transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <form onSubmit={handleAdminUpdateUser} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Nome ou Apelido</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={editUserData.displayName}
+                    onChange={(e) => setEditUserData({ ...editUserData, displayName: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cargo</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={editUserData.jobTitle}
+                      onChange={(e) => setEditUserData({ ...editUserData, jobTitle: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Setor</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={editUserData.department}
+                      onChange={(e) => setEditUserData({ ...editUserData, department: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sexo</label>
+                    <select
+                      className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={editUserData.gender}
+                      onChange={(e) => setEditUserData({ ...editUserData, gender: e.target.value })}
+                    >
+                      <option value="">Selecionar</option>
+                      <option value="Masculino">Masculino</option>
+                      <option value="Feminino">Feminino</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Aniversário</label>
+                    <input
+                      type="date"
+                      className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={editUserData.birthDate}
+                      onChange={(e) => setEditUserData({ ...editUserData, birthDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Telefone</label>
+                  <input
+                    type="tel"
+                    className="w-full px-4 py-2 rounded-xl border border-black/10 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={editUserData.phone}
+                    onChange={(e) => setEditUserData({ ...editUserData, phone: formatPhone(e.target.value) })}
+                  />
+                </div>
+                <div className="pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditUserModalOpen(false)}
+                    className="flex-1 px-4 py-2 rounded-xl border border-black/10 font-semibold hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
@@ -2301,6 +3924,16 @@ function IntranetApp() {
                 <h2 className="text-2xl font-bold text-[#1D1D1F] mb-1">
                   {selectedUserDetail.displayName || 'Usuário'}
                 </h2>
+                {selectedUserDetail.jobTitle && (
+                  <p className="text-xs font-bold text-[#0071E3] uppercase tracking-widest mb-1">
+                    {selectedUserDetail.jobTitle}
+                  </p>
+                )}
+                {selectedUserDetail.department && (
+                  <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-4">
+                    Setor: {selectedUserDetail.department}
+                  </p>
+                )}
                 <p className="text-sm text-[#86868B] mb-6">{selectedUserDetail.email}</p>
 
                 <div className="w-full space-y-4 text-left bg-[#F5F5F7] p-6 rounded-3xl">

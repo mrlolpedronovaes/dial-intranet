@@ -85,7 +85,7 @@ service cloud.firestore {
 
     function isValidUser() {
       let data = request.resource.data;
-      return hasOnlyAllowedFields(['uid', 'email', 'role', 'status', 'lastLogin', 'lastAction', 'lastActionAt', 'online', 'totalActivitySeconds', 'displayName', 'gender', 'birthDate', 'phone', 'photoURL']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'status', 'lastLogin', 'lastAction', 'lastActionAt', 'online', 'totalActivitySeconds', 'displayName', 'gender', 'birthDate', 'phone', 'photoURL', 'jobTitle', 'department']) &&
              hasRequiredFields(['email', 'role']) &&
              data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
              data.role in ['admin', 'user', 'client'] &&
@@ -100,6 +100,8 @@ service cloud.firestore {
              (!('gender' in data) || (data.gender is string && data.gender.size() <= 20)) &&
              (!('birthDate' in data) || (data.birthDate is string && data.birthDate.size() <= 20)) &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('jobTitle' in data) || (data.jobTitle is string && data.jobTitle.size() <= 100)) &&
+             (!('department' in data) || (data.department is string && data.department.size() <= 100)) &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000));
     }
 
@@ -164,7 +166,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isApproved() || isAdmin();
       allow create: if isAuthenticated() && isOwner(userId) && isValidUser() &&
                     ((request.resource.data.role == 'user' && request.resource.data.status == 'pending') || isAdmin());
       allow update: if (isAdmin() || isOwner(userId)) && isValidUser();
@@ -214,6 +216,30 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /config/cleaning {
+      allow read: if isApproved();
+      allow write: if isAdmin();
+    }
+
+    function isValidReport() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['title', 'date', 'category', 'slides', 'createdAt', 'authorId', 'authorName']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.date is string && data.date.size() > 0 && data.date.size() <= 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.slides is list && data.slides.size() <= 50 &&
+             data.createdAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 100));
+    }
+
+    match /reports/{reportId} {
+      allow read: if isApproved();
+      allow create: if isAdmin() && isValidReport();
+      allow update: if isAdmin() && isValidReport();
+      allow delete: if isAdmin();
     }
   }
 }
