@@ -15,7 +15,7 @@ async function startServer() {
   let lastFetchTime = 0;
   let pendingFetch: Promise<any> | null = null;
   const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes
-  const FALLBACK_RATE = { USDBRL: { bid: "5.75" } };
+  const FALLBACK_RATE = { USDBRL: { bid: "5.30" } };
 
   // API routes
   app.get("/api/dollar-rate", async (req, res) => {
@@ -42,11 +42,9 @@ async function startServer() {
         const response = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
         
         if (response.status === 429) {
-          console.warn("API rate limited (429)");
-          if (cachedDollarRate) return cachedDollarRate;
-          return FALLBACK_RATE;
+          console.warn("Rate limited (429). Using cache or fallback.");
+          return cachedDollarRate ?? FALLBACK_RATE;
         }
-
         if (!response.ok) {
           throw new Error(`API responded with status: ${response.status}`);
         }
